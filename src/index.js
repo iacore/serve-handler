@@ -3,9 +3,9 @@ const {promisify} = require('util');
 const path = require('path');
 const {createHash} = require('crypto');
 const {realpath, lstat, createReadStream, readdir} = require('fs');
+const url = require('url');
 
 // Packages
-const url = require('node:url');
 const slasher = require('./glob-slash');
 const minimatch = require('minimatch');
 const pathToRegExp = require('path-to-regexp');
