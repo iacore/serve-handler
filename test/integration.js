@@ -1,13 +1,15 @@
 // Native
+const assert = require('assert');
 const path = require('path');
+const http = require('http');
 
 // Packages
-const test = require('ava');
+const test = require('node:test');
 const listen = require('test-listen');
 const micro = require('micro');
-const fetch = require('node-fetch');
-const fs = require('fs-extra');
-const sleep = require('sleep-promise');
+//const fetch = require('node-fetch');
+const fs = require('fs/promises');
+const sleep = (n) => new Promise(res => setTimeout(res, n))
 
 // Utilities
 const handler = require('../');
@@ -16,14 +18,16 @@ const errorTemplate = require('../src/error');
 const fixturesTarget = 'test/fixtures';
 const fixturesFull = path.join(process.cwd(), fixturesTarget);
 
+const readJSON = async (path) => JSON.parse(await fs.readFile(path))
+
 const getUrl = (customConfig, handlers) => {
 	const config = Object.assign({
 		'public': fixturesTarget
 	}, customConfig);
 
-	const server = micro(async (request, response) => {
+	const server = new http.Server(micro.serve(async (request, response) => {
 		await handler(request, response, config, handlers);
-	});
+	}));
 
 	return listen(server);
 };
@@ -53,8 +57,8 @@ test('render html directory listing', async t => {
 
 	const type = response.headers.get('content-type');
 
-	t.is(type, 'text/html; charset=utf-8');
-	t.true(contents.every(item => text.includes(item)));
+	assert.equal(type, 'text/html; charset=utf-8');
+	assert(contents.every(item => text.includes(item)));
 });
 
 test('render json directory listing', async t => {
@@ -68,7 +72,7 @@ test('render json directory listing', async t => {
 	});
 
 	const type = response.headers.get('content-type');
-	t.is(type, 'application/json; charset=utf-8');
+	assert.equal(type, 'application/json; charset=utf-8');
 
 	const {files} = await response.json();
 
@@ -77,7 +81,7 @@ test('render json directory listing', async t => {
 		return contents.includes(full);
 	});
 
-	t.true(existing);
+	assert(existing);
 });
 
 test('render html sub directory listing', async t => {
@@ -90,9 +94,9 @@ test('render html sub directory listing', async t => {
 	const text = await response.text();
 
 	const type = response.headers.get('content-type');
-	t.is(type, 'text/html; charset=utf-8');
+	assert.equal(type, 'text/html; charset=utf-8');
 
-	t.true(contents.every(item => text.includes(item)));
+	assert(contents.every(item => text.includes(item)));
 });
 
 test('render json sub directory listing', async t => {
@@ -109,7 +113,7 @@ test('render json sub directory listing', async t => {
 	});
 
 	const type = response.headers.get('content-type');
-	t.is(type, 'application/json; charset=utf-8');
+	assert.equal(type, 'application/json; charset=utf-8');
 
 	const {files} = await response.json();
 
@@ -118,7 +122,7 @@ test('render json sub directory listing', async t => {
 		return contents.includes(full);
 	});
 
-	t.true(existing);
+	assert(existing);
 });
 
 test('render json sub directory listing with custom stat handler', async t => {
@@ -131,9 +135,9 @@ test('render json sub directory listing with custom stat handler', async t => {
 	const url = await getUrl(undefined, {
 		lstat: (location, isDirectoryListing) => {
 			if (contents.includes(path.basename(location))) {
-				t.true(isDirectoryListing);
+				assert(isDirectoryListing);
 			} else {
-				t.falsy(isDirectoryListing);
+				assert(!isDirectoryListing);
 			}
 
 			return fs.lstat(location);
@@ -147,7 +151,7 @@ test('render json sub directory listing with custom stat handler', async t => {
 	});
 
 	const type = response.headers.get('content-type');
-	t.is(type, 'application/json; charset=utf-8');
+	assert.equal(type, 'application/json; charset=utf-8');
 
 	const {files} = await response.json();
 
@@ -156,7 +160,7 @@ test('render json sub directory listing with custom stat handler', async t => {
 		return contents.includes(full);
 	});
 
-	t.true(existing);
+	assert(existing);
 });
 
 test('render dotfile', async t => {
@@ -168,24 +172,24 @@ test('render dotfile', async t => {
 	const response = await fetch(`${url}/${name}`);
 	const text = await response.text();
 
-	t.deepEqual(content, text);
+	assert.deepEqual(content, text);
 });
 
 test('render json file', async t => {
 	const name = 'object.json';
 	const related = path.join(fixturesFull, name);
 
-	const content = await fs.readJSON(related);
+	const content = await readJSON(related);
 	const url = await getUrl();
 	const response = await fetch(`${url}/${name}`);
 
 	const type = response.headers.get('content-type');
-	t.is(type, 'application/json; charset=utf-8');
+	assert.equal(type, 'application/json; charset=utf-8');
 
 	const text = await response.text();
 	const spec = JSON.parse(text);
 
-	t.deepEqual(spec, content);
+	assert.deepEqual(spec, content);
 });
 
 test('try to render non-existing json file', async t => {
@@ -195,8 +199,8 @@ test('try to render non-existing json file', async t => {
 
 	const type = response.headers.get('content-type');
 
-	t.is(type, 'text/html; charset=utf-8');
-	t.is(response.status, 404);
+	assert.equal(type, 'text/html; charset=utf-8');
+	assert.equal(response.status, 404);
 });
 
 test('try to render non-existing json file and `stat` errors', async t => {
@@ -220,14 +224,14 @@ test('try to render non-existing json file and `stat` errors', async t => {
 	const response = await fetch(`${url}/${name}`);
 	const text = await response.text();
 
-	t.is(response.status, 500);
+	assert.equal(response.status, 500);
 
 	const content = errorTemplate({
 		statusCode: 500,
 		message: 'A server error has occurred'
 	});
 
-	t.is(text, content);
+	assert.equal(text, content);
 });
 
 test('set `trailingSlash` config property to `true`', async t => {
@@ -235,15 +239,15 @@ test('set `trailingSlash` config property to `true`', async t => {
 		trailingSlash: true
 	});
 
-	const target = `${url}/test`;
+	const target = `/test`;
 
-	const response = await fetch(target, {
+	const response = await fetch(`${url}/${target}`, {
 		redirect: 'manual',
 		follow: 0
 	});
 
 	const location = response.headers.get('location');
-	t.is(location, `${target}/`);
+	assert.equal(location, `${target}/`);
 });
 
 test('set `trailingSlash` config property to any boolean and remove multiple slashes', async t => {
@@ -251,15 +255,15 @@ test('set `trailingSlash` config property to any boolean and remove multiple sla
 		trailingSlash: true
 	});
 
-	const target = `${url}/test/`;
+	const target = `/test/`;
 
-	const response = await fetch(`${target}//////`, {
+	const response = await fetch(`${url}/${target}//////`, {
 		redirect: 'manual',
 		follow: 0
 	});
 
 	const location = response.headers.get('location');
-	t.is(location, target);
+	assert.equal(location, target);
 });
 
 test('set `trailingSlash` config property to `false`', async t => {
@@ -267,15 +271,15 @@ test('set `trailingSlash` config property to `false`', async t => {
 		trailingSlash: false
 	});
 
-	const target = `${url}/test`;
+	const target = `/test`;
 
-	const response = await fetch(`${target}/`, {
+	const response = await fetch(`${url}/${target}/`, {
 		redirect: 'manual',
 		follow: 0
 	});
 
 	const location = response.headers.get('location');
-	t.is(location, target);
+	assert.equal(location, target);
 });
 
 test('set `cleanUrls` config property should prevent open redirects', async t => {
@@ -289,7 +293,7 @@ test('set `cleanUrls` config property should prevent open redirects', async t =>
 	});
 
 	const location = response.headers.get('location');
-	t.is(location, `${url}/haveibeenpwned.com`);
+	assert.equal(location, `${url}/haveibeenpwned.com`);
 });
 
 test('set `rewrites` config property to wildcard path', async t => {
@@ -307,7 +311,7 @@ test('set `rewrites` config property to wildcard path', async t => {
 	const response = await fetch(`${url}/face/delete`);
 	const text = await response.text();
 
-	t.is(text, content);
+	assert.equal(text, content);
 });
 
 test('set `rewrites` config property to non-matching path', async t => {
@@ -325,7 +329,7 @@ test('set `rewrites` config property to non-matching path', async t => {
 	const response = await fetch(`${url}/mask/delete`);
 	const text = await response.text();
 
-	t.is(text, content);
+	assert.equal(text, content);
 });
 
 test('set `rewrites` config property to one-star wildcard path', async t => {
@@ -343,12 +347,12 @@ test('set `rewrites` config property to one-star wildcard path', async t => {
 	const response = await fetch(`${url}/face/delete/mask`);
 	const text = await response.text();
 
-	t.is(text, content);
+	assert.equal(text, content);
 });
 
 test('set `rewrites` config property to path segment', async t => {
 	const related = path.join(fixturesFull, 'object.json');
-	const content = await fs.readJSON(related);
+	const content = await readJSON(related);
 
 	const url = await getUrl({
 		rewrites: [{
@@ -360,7 +364,7 @@ test('set `rewrites` config property to path segment', async t => {
 	const response = await fetch(`${url}/face/object`);
 	const json = await response.json();
 
-	t.deepEqual(json, content);
+	assert.deepEqual(json, content);
 });
 
 test('set `redirects` config property to wildcard path', async t => {
@@ -379,7 +383,7 @@ test('set `redirects` config property to wildcard path', async t => {
 	});
 
 	const location = response.headers.get('location');
-	t.is(location, `${url}/${destination}`);
+	assert.equal(location, `${url}/${destination}`);
 });
 
 test('set `redirects` config property to a negated wildcard path', async t => {
@@ -398,7 +402,7 @@ test('set `redirects` config property to a negated wildcard path', async t => {
 	});
 
 	const locationTruthy = responseTruthy.headers.get('location');
-	t.is(locationTruthy, `${url}/${destination}`);
+	assert.equal(locationTruthy, `${url}/${destination}`);
 
 	const responseFalsy = await fetch(`${url}/face/mask`, {
 		redirect: 'manual',
@@ -406,7 +410,7 @@ test('set `redirects` config property to a negated wildcard path', async t => {
 	});
 
 	const locationFalsy = responseFalsy.headers.get('location');
-	t.falsy(locationFalsy);
+	assert(!locationFalsy);
 });
 
 test('set `redirects` config property to wildcard path and do not match', async t => {
@@ -425,7 +429,7 @@ test('set `redirects` config property to wildcard path and do not match', async 
 	});
 
 	const location = response.headers.get('location');
-	t.falsy(location);
+	assert(!location);
 });
 
 test('set `redirects` config property to one-star wildcard path', async t => {
@@ -444,7 +448,7 @@ test('set `redirects` config property to one-star wildcard path', async t => {
 	});
 
 	const location = response.headers.get('location');
-	t.is(location, `${url}/${destination}`);
+	assert.equal(location, `${url}/${destination}`);
 });
 
 test('set `redirects` config property to extglob wildcard path', async t => {
@@ -463,7 +467,7 @@ test('set `redirects` config property to extglob wildcard path', async t => {
 	});
 
 	const location = response.headers.get('location');
-	t.is(location, `${url}/${destination}`);
+	assert.equal(location, `${url}/${destination}`);
 });
 
 test('set `redirects` config property to path segment', async t => {
@@ -480,7 +484,7 @@ test('set `redirects` config property to path segment', async t => {
 	});
 
 	const location = response.headers.get('location');
-	t.is(location, `${url}/mask/me`);
+	assert.equal(location, `${url}/mask/me`);
 });
 
 test('set `redirects` config property to wildcard path and `trailingSlash` to `true`', async t => {
@@ -500,7 +504,7 @@ test('set `redirects` config property to wildcard path and `trailingSlash` to `t
 	});
 
 	const location = response.headers.get('location');
-	t.is(location, `${url + target}/`);
+	assert.equal(location, `${url + target}/`);
 });
 
 test('set `redirects` config property to wildcard path and `trailingSlash` to `false`', async t => {
@@ -520,7 +524,7 @@ test('set `redirects` config property to wildcard path and `trailingSlash` to `f
 	});
 
 	const location = response.headers.get('location');
-	t.is(location, url + target);
+	assert.equal(location, url + target);
 });
 
 test('pass custom handlers', async t => {
@@ -536,7 +540,7 @@ test('pass custom handlers', async t => {
 	const text = await response.text();
 	const content = await fs.readFile(path.join(fixturesFull, name), 'utf8');
 
-	t.is(text, content);
+	assert.equal(text, content);
 });
 
 test('set `headers` to wildcard headers', async t => {
@@ -558,7 +562,7 @@ test('set `headers` to wildcard headers', async t => {
 	const response = await fetch(`${url}/docs.md`);
 	const cacheControl = response.headers.get(key);
 
-	t.is(cacheControl, value);
+	assert.equal(cacheControl, value);
 });
 
 test('set `headers` to fixed headers and check default headers', async t => {
@@ -581,8 +585,8 @@ test('set `headers` to fixed headers and check default headers', async t => {
 	const cacheControl = headers.get(key);
 	const type = headers.get('content-type');
 
-	t.is(cacheControl, value);
-	t.is(type, 'application/json; charset=utf-8');
+	assert.equal(cacheControl, value);
+	assert.equal(type, 'application/json; charset=utf-8');
 });
 
 test('receive not found error', async t => {
@@ -598,7 +602,7 @@ test('receive not found error', async t => {
 		message: 'The requested path could not be found'
 	});
 
-	t.is(text, content);
+	assert.equal(text, content);
 });
 
 test('receive not found error as json', async t => {
@@ -612,7 +616,7 @@ test('receive not found error as json', async t => {
 
 	const json = await response.json();
 
-	t.deepEqual(json, {
+	assert.deepEqual(json, {
 		error: {
 			code: 'not_found',
 			message: 'The requested path could not be found'
@@ -625,7 +629,7 @@ test('receive custom `404.html` error page', async t => {
 	const response = await fetch(`${url}/not-existing`);
 	const text = await response.text();
 
-	t.is(text.trim(), '<span>Not Found</span>');
+	assert.equal(text.trim(), '<span>Not Found</span>');
 });
 
 test('error is still sent back even if reading `404.html` failed', async t => {
@@ -643,14 +647,14 @@ test('error is still sent back even if reading `404.html` failed', async t => {
 	const response = await fetch(`${url}/not-existing`);
 	const text = await response.text();
 
-	t.is(response.status, 404);
+	assert.equal(response.status, 404);
 
 	const content = errorTemplate({
 		statusCode: 404,
 		message: 'The requested path could not be found'
 	});
 
-	t.is(text, content);
+	assert.equal(text, content);
 });
 
 test('disabled directory listing', async t => {
@@ -661,8 +665,8 @@ test('disabled directory listing', async t => {
 	const response = await fetch(url);
 	const text = await response.text();
 
-	t.is(response.status, 404);
-	t.is(text.trim(), '<span>Not Found</span>');
+	assert.equal(response.status, 404);
+	assert.equal(text.trim(), '<span>Not Found</span>');
 });
 
 test('listing the directory failed', async t => {
@@ -678,14 +682,14 @@ test('listing the directory failed', async t => {
 	const response = await fetch(url);
 	const text = await response.text();
 
-	t.is(response.status, 500);
+	assert.equal(response.status, 500);
 
 	const content = errorTemplate({
 		statusCode: 500,
 		message: 'A server error has occurred'
 	});
 
-	t.is(text, content);
+	assert.equal(text, content);
 });
 
 test('set `cleanUrls` config property to `true`', async t => {
@@ -700,7 +704,7 @@ test('set `cleanUrls` config property to `true`', async t => {
 	const content = await fs.readFile(index, 'utf8');
 	const text = await response.text();
 
-	t.is(content, text);
+	assert.equal(content, text);
 });
 
 test('set `cleanUrls` config property to array', async t => {
@@ -717,7 +721,7 @@ test('set `cleanUrls` config property to array', async t => {
 	const content = await fs.readFile(index, 'utf8');
 	const text = await response.text();
 
-	t.is(content, text);
+	assert.equal(content, text);
 });
 
 test('set `cleanUrls` config property to empty array', async t => {
@@ -734,9 +738,9 @@ test('set `cleanUrls` config property to empty array', async t => {
 	const text = await response.text();
 
 	const type = response.headers.get('content-type');
-	t.is(type, 'text/html; charset=utf-8');
+	assert.equal(type, 'text/html; charset=utf-8');
 
-	t.true(contents.every(item => text.includes(item)));
+	assert(contents.every(item => text.includes(item)));
 });
 
 test('set `cleanUrls` config property to `true` and try with file', async t => {
@@ -752,7 +756,7 @@ test('set `cleanUrls` config property to `true` and try with file', async t => {
 	});
 
 	const location = response.headers.get('location');
-	t.is(location, `${url}${target}`);
+	assert.equal(location, `${url}${target}`);
 });
 
 test('set `cleanUrls` config property to `true` and not index file found', async t => {
@@ -766,7 +770,7 @@ test('set `cleanUrls` config property to `true` and not index file found', async
 	});
 
 	const type = response.headers.get('content-type');
-	t.is(type, 'application/json; charset=utf-8');
+	assert.equal(type, 'application/json; charset=utf-8');
 
 	const {files} = await response.json();
 
@@ -775,7 +779,7 @@ test('set `cleanUrls` config property to `true` and not index file found', async
 		return contents.includes(full);
 	});
 
-	t.true(existing);
+	assert(existing);
 });
 
 test('set `cleanUrls` config property to `true` and an error occurs', async t => {
@@ -797,14 +801,14 @@ test('set `cleanUrls` config property to `true` and an error occurs', async t =>
 	const response = await fetch(`${url}/${target}`);
 	const text = await response.text();
 
-	t.is(response.status, 500);
+	assert.equal(response.status, 500);
 
 	const content = errorTemplate({
 		statusCode: 500,
 		message: 'A server error has occurred'
 	});
 
-	t.is(text, content);
+	assert.equal(text, content);
 });
 
 test('error occurs while getting stat of path', async t => {
@@ -827,8 +831,8 @@ test('error occurs while getting stat of path', async t => {
 		message: 'A server error has occurred'
 	});
 
-	t.is(response.status, 500);
-	t.is(text, content);
+	assert.equal(response.status, 500);
+	assert.equal(text, content);
 });
 
 test('the first `lstat` call should be for a related file', async t => {
@@ -838,7 +842,7 @@ test('the first `lstat` call should be for a related file', async t => {
 	const url = await getUrl(undefined, {
 		lstat: location => {
 			if (!done) {
-				t.is(path.basename(location), 'index.html');
+				assert.equal(path.basename(location), 'index.html');
 				done = true;
 			}
 
@@ -862,7 +866,7 @@ test('the `lstat` call should only be made for files and directories', async t =
 
 	await fetch(url);
 
-	t.falsy(locations.some(location => path.basename(location) === '.html'));
+	assert(!locations.some(location => path.basename(location) === '.html'));
 });
 
 test('error occurs while getting stat of not-found path', async t => {
@@ -883,14 +887,14 @@ test('error occurs while getting stat of not-found path', async t => {
 	const response = await fetch(`${url}/${base}`);
 	const text = await response.text();
 
-	t.is(response.status, 500);
+	assert.equal(response.status, 500);
 
 	const content = errorTemplate({
 		statusCode: 500,
 		message: 'A server error has occurred'
 	});
 
-	t.is(text, content);
+	assert.equal(text, content);
 });
 
 test('set `unlisted` config property to array', async t => {
@@ -908,7 +912,7 @@ test('set `unlisted` config property to array', async t => {
 	});
 
 	const type = response.headers.get('content-type');
-	t.is(type, 'application/json; charset=utf-8');
+	assert.equal(type, 'application/json; charset=utf-8');
 
 	const {files} = await response.json();
 
@@ -917,7 +921,7 @@ test('set `unlisted` config property to array', async t => {
 		return contents.includes(full);
 	});
 
-	t.true(existing);
+	assert(existing);
 });
 
 test('set `createReadStream` handler to async function', async t => {
@@ -936,7 +940,7 @@ test('set `createReadStream` handler to async function', async t => {
 	const response = await fetch(`${url}/${name}`);
 	const text = await response.text();
 
-	t.deepEqual(content, text);
+	assert.deepEqual(content, text);
 });
 
 test('return mime type of the `rewrittenPath` if mime type of `relativePath` is null', async t => {
@@ -950,7 +954,7 @@ test('return mime type of the `rewrittenPath` if mime type of `relativePath` is 
 	const response = await fetch(`${url}/whatever`);
 	const type = response.headers.get('content-type');
 
-	t.is(type, 'text/html; charset=utf-8');
+	assert.equal(type, 'text/html; charset=utf-8');
 });
 
 test('error if trying to traverse path', async t => {
@@ -958,14 +962,14 @@ test('error if trying to traverse path', async t => {
 	const response = await fetch(`${url}/../../test`);
 	const text = await response.text();
 
-	t.is(response.status, 400);
+	assert.equal(response.status, 400);
 
 	const content = errorTemplate({
 		statusCode: 400,
 		message: 'Bad Request'
 	});
 
-	t.is(text, content);
+	assert.equal(text, content);
 });
 
 test('render file if directory only contains one', async t => {
@@ -981,7 +985,7 @@ test('render file if directory only contains one', async t => {
 	const response = await fetch(`${url}/${directory}`);
 	const text = await response.text();
 
-	t.is(text, content);
+	assert.equal(text, content);
 });
 
 test('correctly handle requests to /index if `cleanUrls` is enabled', async t => {
@@ -994,7 +998,7 @@ test('correctly handle requests to /index if `cleanUrls` is enabled', async t =>
 	});
 
 	const location = response.headers.get('location');
-	t.is(location, `${url}/`);
+	assert.equal(location, `${url}/`);
 });
 
 test('allow dots in `public` configuration property', async t => {
@@ -1011,8 +1015,8 @@ test('allow dots in `public` configuration property', async t => {
 	const text = await response.text();
 	const content = await fs.readFile(file, 'utf8');
 
-	t.is(response.status, 200);
-	t.is(content, text);
+	assert.equal(response.status, 200);
+	assert.equal(content, text);
 });
 
 test('error for request with malformed URI', async t => {
@@ -1020,14 +1024,14 @@ test('error for request with malformed URI', async t => {
 	const response = await fetch(`${url}/%E0%A4%A`);
 	const text = await response.text();
 
-	t.is(response.status, 400);
+	assert.equal(response.status, 400);
 
 	const content = errorTemplate({
 		statusCode: 400,
 		message: 'Bad Request'
 	});
 
-	t.is(text, content);
+	assert.equal(text, content);
 });
 
 test('error responses get custom headers', async t => {
@@ -1045,15 +1049,15 @@ test('error responses get custom headers', async t => {
 	const response = await fetch(`${url}/non-existing`);
 	const text = await response.text();
 
-	t.is(response.status, 404);
-	t.is(response.headers.get('who'), 'me');
+	assert.equal(response.status, 404);
+	assert.equal(response.headers.get('who'), 'me');
 
 	const content = errorTemplate({
 		statusCode: 404,
 		message: 'The requested path could not be found'
 	});
 
-	t.is(text, content);
+	assert.equal(text, content);
 });
 
 test('modify config in `createReadStream` handler', async t => {
@@ -1085,14 +1089,14 @@ test('modify config in `createReadStream` handler', async t => {
 	const text = await response.text();
 	const output = response.headers.get(header.key);
 
-	t.deepEqual(content, text);
-	t.deepEqual(output, header.value);
+	assert.deepEqual(content, text);
+	assert.deepEqual(output, header.value);
 });
 
 test('automatically handle ETag headers for normal files', async t => {
 	const name = 'object.json';
 	const related = path.join(fixturesFull, name);
-	const content = await fs.readJSON(related);
+	const content = await readJSON(related);
 	const value = '"d2ijdjoi29f3h3232"';
 
 	const url = await getUrl({
@@ -1111,13 +1115,13 @@ test('automatically handle ETag headers for normal files', async t => {
 	const type = headers.get('content-type');
 	const eTag = headers.get('etag');
 
-	t.is(type, 'application/json; charset=utf-8');
-	t.is(eTag, value);
+	assert.equal(type, 'application/json; charset=utf-8');
+	assert.equal(eTag, value);
 
 	const text = await response.text();
 	const spec = JSON.parse(text);
 
-	t.deepEqual(spec, content);
+	assert.deepEqual(spec, content);
 
 	const cacheResponse = await fetch(`${url}/${name}`, {
 		headers: {
@@ -1125,7 +1129,7 @@ test('automatically handle ETag headers for normal files', async t => {
 		}
 	});
 
-	t.is(cacheResponse.status, 304);
+	assert.equal(cacheResponse.status, 304);
 });
 
 test('range request without size', async t => {
@@ -1165,14 +1169,14 @@ test('range request without size', async t => {
 	const range = response.headers.get('content-range');
 	const length = Number(response.headers.get('content-length'));
 
-	t.is(range, null);
+	assert.equal(range, null);
 
-	// The full document is sent back
-	t.is(length, 27);
-	t.is(response.status, 200);
+	// The full documenassert.equal sent back
+	assert.equal(length, 27);
+	assert.equal(response.status, 200);
 
 	const text = await response.text();
-	t.is(text, content.toString());
+	assert.equal(text, content.toString());
 });
 
 test('range request', async t => {
@@ -1191,14 +1195,14 @@ test('range request', async t => {
 	const range = response.headers.get('content-range');
 	const length = Number(response.headers.get('content-length'));
 
-	t.is(range, `bytes 0-10/${content.length}`);
-	t.is(length, 11);
-	t.is(response.status, 206);
+	assert.equal(range, `bytes 0-10/${content.length}`);
+	assert.equal(length, 11);
+	assert.equal(response.status, 206);
 
 	const text = await response.text();
 	const spec = content.toString().substr(0, 11);
 
-	t.is(text, spec);
+	assert.equal(text, spec);
 });
 
 test('range request not satisfiable', async t => {
@@ -1217,14 +1221,14 @@ test('range request not satisfiable', async t => {
 	const range = response.headers.get('content-range');
 	const length = Number(response.headers.get('content-length'));
 
-	t.is(range, `bytes */${content.length}`);
-	t.is(length, content.length);
-	t.is(response.status, 416);
+	assert.equal(range, `bytes */${content.length}`);
+	assert.equal(length, content.length);
+	assert.equal(response.status, 416);
 
 	const text = await response.text();
 	const spec = content.toString();
 
-	t.is(text, spec);
+	assert.equal(text, spec);
 });
 
 test('remove header when null', async t => {
@@ -1249,7 +1253,7 @@ test('remove header when null', async t => {
 	const {headers} = await fetch(`${url}/object.json`);
 	const cacheControl = headers.get(key);
 
-	t.falsy(cacheControl);
+	assert(!cacheControl);
 });
 
 test('errors in `createReadStream` get handled', async t => {
@@ -1270,8 +1274,8 @@ test('errors in `createReadStream` get handled', async t => {
 		message: 'A server error has occurred'
 	});
 
-	t.deepEqual(content, text);
-	t.deepEqual(response.status, 500);
+	assert.deepEqual(content, text);
+	assert.deepEqual(response.status, 500);
 });
 
 test('log error when checking `404.html` failed', async t => {
@@ -1289,14 +1293,14 @@ test('log error when checking `404.html` failed', async t => {
 	const response = await fetch(`${url}/not-existing`);
 	const text = await response.text();
 
-	t.is(response.status, 404);
+	assert.equal(response.status, 404);
 
 	const content = errorTemplate({
 		statusCode: 404,
 		message: 'The requested path could not be found'
 	});
 
-	t.is(text, content);
+	assert.equal(text, content);
 });
 
 test('prevent access to parent directory', async t => {
@@ -1309,7 +1313,7 @@ test('prevent access to parent directory', async t => {
 	const response = await fetch(`${url}/dir/../secret`);
 	const text = await response.text();
 
-	t.is(text.trim(), '<span>Not Found</span>');
+	assert.equal(text.trim(), '<span>Not Found</span>');
 });
 
 test('symlinks should not work by default', async t => {
@@ -1319,8 +1323,8 @@ test('symlinks should not work by default', async t => {
 	const response = await fetch(`${url}/${name}`);
 	const text = await response.text();
 
-	t.is(response.status, 404);
-	t.is(text.trim(), '<span>Not Found</span>');
+	assert.equal(response.status, 404);
+	assert.equal(text.trim(), '<span>Not Found</span>');
 });
 
 test('allow symlinks by setting the option', async t => {
@@ -1335,13 +1339,13 @@ test('allow symlinks by setting the option', async t => {
 	const response = await fetch(`${url}/${name}`);
 	const length = Number(response.headers.get('content-length'));
 
-	t.is(length, content.length);
-	t.is(response.status, 200);
+	assert.equal(length, content.length);
+	assert.equal(response.status, 200);
 
 	const text = await response.text();
 	const spec = content.toString();
 
-	t.is(text, spec);
+	assert.equal(text, spec);
 });
 
 test('etag header is set', async t => {
@@ -1351,15 +1355,15 @@ test('etag header is set', async t => {
 	});
 
 	let response = await fetch(`${url}/docs.md`);
-	t.is(response.status, 200);
-	t.is(
+	assert.equal(response.status, 200);
+	assert.equal(
 		response.headers.get('etag'),
 		'"60be4422531fce1513df34cbcc90bed5915a53ef"'
 	);
 
 	response = await fetch(`${url}/docs.txt`);
-	t.is(response.status, 200);
-	t.is(
+	assert.equal(response.status, 200);
+	assert.equal(
 		response.headers.get('etag'),
 		'"ba114dbc69e41e180362234807f093c3c4628f90"'
 	);

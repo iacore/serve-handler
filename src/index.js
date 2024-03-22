@@ -7,7 +7,7 @@ const url = require('url');
 
 // Packages
 const slasher = require('./glob-slash');
-const minimatch = require('minimatch');
+const { minimatch } = require('minimatch');
 const pathToRegExp = require('path-to-regexp');
 const mime = require('mime-types');
 const bytes = require('bytes');
